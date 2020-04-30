@@ -14,12 +14,19 @@ try:
 except:
     from simplecachedummy import SimpleCache
 
-# All of the packet exchanges for the Android API were sniffed using the Packet Capture App
-Film = namedtuple('Film', ['title', 'mubi_id', 'artwork', 'metadata'])
-Metadata = namedtuple('Metadata',
-                      ['title', 'director', 'year', 'duration', 'country', 'plot', 'overlay', 'genre', 'originaltitle',
-                       'rating', 'votes', 'castandrole', 'trailer'])
+APP_VERSION_CODE = '4.46'
 
+# All of the packet exchanges for the Android API were sniffed using the Packet Capture App
+Film = namedtuple(
+    'Film',
+    ['title', 'mubi_id', 'artwork', 'metadata']
+)
+
+Metadata = namedtuple(
+    'Metadata',
+    ['title', 'director', 'year', 'duration', 'country', 'plot', 'overlay',
+     'genre', 'originaltitle', 'rating', 'votes', 'castandrole', 'trailer']
+)
 
 class Mubi(object):
     _URL_MUBI = "https://mubi.com"
@@ -42,34 +49,48 @@ class Mubi(object):
         self._token = None
         self._userid = None
         self._country = None
+        # The new mubi API (under the route /api/v1/[...] rather than /services/android) asks for these header fields:
         self._headers = {
             'client': 'android',
             'client-app': 'mubi',
-            'client-version': '4.46',
+            'client-version': APP_VERSION_CODE,
             'client-device-identifier': str(self._udid)
         }
         self.login()
 
     def login(self):
-        payload = {'email': self._username, 'password': self._password}
+        payload = {
+            'email': self._username,
+            'password': self._password
+        }
         xbmc.log("Logging in with username: %s and udid: %s" % (self._username, self._udid), 2)
+
         r = requests.post(self._mubi_urls["login"], headers=self._headers, data=payload)
         result = (''.join(r.text)).encode('utf-8')
+
         if r.status_code == 200:
             self._token = json.loads(result)['token']
             self._userid = json.loads(result)['user']['id']
             self._headers['authorization'] = 'Bearer ' + self._token
             xbmc.log("Login Successful with token=%s and userid=%s" % (self._token, self._userid), 2)
+
         else:
             xbmc.log("Login Failed with result: %s" % result, 4)
+
         self.app_startup()
         return r.status_code
 
     def app_startup(self):
-        payload = {'udid': self._udid, 'token': self._token, 'client': 'android',
-                   'client_version': '4.46'}
+        payload = {
+            'udid': self._udid,
+            'token': self._token,
+            'client': 'android',
+            'client_version': APP_VERSION_CODE
+        }
+
         r = requests.post(self._mubi_urls['startup'] + "?client=android", data=payload)
         result = (''.join(r.text)).encode('utf-8')
+
         if r.status_code == 200:
             self._country = json.loads(result)['country']
             xbmc.log("Successfully got country as %s" % self._country, 2)
@@ -81,10 +102,13 @@ class Mubi(object):
         cached = self._simplecache.get(self._cache_id % film_id)
         if cached:
             return json.loads(cached)
-        args = "?client=android&country=%s&token=%s&udid=%s&client_version=4.46" % (self._country, self._token, self._udid)
+
+        args = "?client=android&country=%s&token=%s&udid=%s&client_version=%s" % (self._country, self._token, self._udid, APP_VERSION_CODE)
         r = requests.get((self._mubi_urls['film'] % str(film_id)) + args)
+
         if r.status_code != 200:
             xbmc.log("Invalid status code %s getting film info for %s" % (r.status_code, film_id), 4)
+
         self._simplecache.set(self._cache_id % film_id, r.text, expiration=datetime.timedelta(days=32))
         return json.loads(r.text)
 
@@ -133,7 +157,7 @@ class Mubi(object):
 
     def get_now_showing_json(self):
         # Get list of available films
-        args = "?client=android&country=%s&token=%s&udid=%s&client_version=4.46" % (self._country, self._token, self._udid)
+        args = "?client=android&country=%s&token=%s&udid=%s&client_version=%s" % (self._country, self._token, self._udid, APP_VERSION_CODE)
         r = requests.get(self._mubi_urls['films'] + args)
         if r.status_code != 200:
             xbmc.log("Invalid status code %s getting list of films", 4)
@@ -158,13 +182,13 @@ class Mubi(object):
     def get_play_url(self, film_id):
         (reel_id, is_drm) = self.get_default_reel_id_is_drm(film_id)
 
-        # set reel
+        # set the current reel before playing the movie (reverse-engineered behavior taken from the Android app)
         payload = {'reel_id': reel_id, 'sidecar_subtitle_language_id': 20}
         r = requests.put((self._mubi_urls['set_reel'] % str(film_id)), data=payload, headers=self._headers)
         result = (''.join(r.text)).encode('utf-8')
         xbmc.log("Set reel response: %s" % result, 2)
 
-        # get film url
+        # get the movie URL
         args = "?country=%s&download=false" % (self._country)
         r = requests.get((self._mubi_urls['get_url'] % (str(film_id), str(reel_id))) + args, headers=self._headers)
         result = (''.join(r.text)).encode('utf-8')
@@ -172,13 +196,12 @@ class Mubi(object):
             xbmc.log("Could not get secure URL for film %s with reel_id=%s" % (film_id, reel_id), 4)
         xbmc.log("Response was: %s" % result, 2)
         url = json.loads(result)["url"]
-        # For DRM you will have to find the following info:
-        # {"userId": long(result['username']), "sessionId": result['transaction'], "merchant": result['accountCode']}
-        # This might need optdata in header however looking in requests during browser negotiation I don't see it
-        # https://stackoverflow.com/questions/35792897/http-request-header-field-optdata
-        # The best conversation for this is:
-        # https://github.com/emilsvennesson/kodi-viaplay/issues/9
-        # You can pick this conversation up using Android Packet Capture
-        item_result = {'url': url, 'is_mpd': "mpd" in url, 'is_drm': is_drm, 'drm_header': base64.b64encode('{"userId":' + str(self._userid) + ',"sessionId":"' + self._token + '","merchant":"mubi"}')}
+
+        # return the video info
+        item_result = {
+            'url': url,
+            'is_mpd': "mpd" in url,
+            'drm_header': base64.b64encode('{"userId":' + str(self._userid) + ',"sessionId":"' + self._token + '","merchant":"mubi"}') if is_drm else None
+        }
         xbmc.log("Got video info as: '%s'" % json.dumps(item_result), 2)
         return item_result

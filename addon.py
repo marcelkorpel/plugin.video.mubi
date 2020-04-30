@@ -8,6 +8,11 @@ PLUGIN_ID = 'plugin.video.mubi'
 
 DRM = 'widevine'
 PROTOCOL = 'mpd'
+
+# DRM Licenses are issued by: https://lic.drmtoday.com/license-proxy-widevine/cenc/
+# The header data has to contain the field dt-custom-data
+# This field includes a base64-encoded string with the following data: {"userId":[userId],"sessionId":"[sessionToken]","merchant":"mubi"}
+# The user id and session token can be obtained with the login
 LICENSE_URL = 'https://lic.drmtoday.com/license-proxy-widevine/cenc/'
 LICENSE_URL_HEADERS = 'User-Agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.123 Safari/537.36&Host=lic.drmtoday.com&Origin=https://mubi.com&Referer=https://mubi.com/&Sec-Fetch-Dest=empty&Sec-Fetch-Mode=cors&Sec-Fetch-Site=cross-site&Accept-Encoding=gzip, deflate, br&Accept-Language=en-US,en;q=0.9&Connection=keep-alive&Content-Type=application/json;charset=utf-8'
 
@@ -41,7 +46,7 @@ def play_film(identifier):
         mubi_film.setProperty('inputstreamaddon', 'inputstream.adaptive')
         mubi_film.setProperty('inputstream.adaptive.manifest_type', 'mpd')
 
-        if mubi_resolved_info['is_drm']:
+        if mubi_resolved_info['drm_header'] is not None:
             xbmc.log('DRM Header: %s' %mubi_resolved_info['drm_header'], 2)
             mubi_film.setProperty('inputstream.adaptive.license_type', "com.widevine.alpha")
             mubi_film.setProperty('inputstream.adaptive.license_key', LICENSE_URL + '|' + LICENSE_URL_HEADERS + '&dt-custom-data=' + mubi_resolved_info['drm_header'] + '|R{SSM}|JBlicense')
