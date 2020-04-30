@@ -1,3 +1,4 @@
+Copyright (c) 2020, Felix Heller (flx-apps.com)
 Copyright (c) 2015, Jamie Unwin (jamieu)
 
 Sections of library code based on a previous project by Johannes Baiter (jbaiter)
