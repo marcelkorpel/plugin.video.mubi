@@ -1,8 +1,6 @@
 
 # MUBI Addon for Kodi
 
-Happy to accept a PR if someone wants to try and get it working again, but I no longer have time to maintain it myself.
-
 ## What it is
 
 Plugin to stream video from MUBI.com within Kodi / XBMC.
