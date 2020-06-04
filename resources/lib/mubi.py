@@ -14,7 +14,7 @@ try:
 except:
     from simplecachedummy import SimpleCache
 
-APP_VERSION_CODE = '4.46'
+APP_VERSION_CODE = '4.47'
 
 # All of the packet exchanges for the Android API were sniffed using the Packet Capture App
 Film = namedtuple(
@@ -34,6 +34,7 @@ class Mubi(object):
         "login": urljoin(_URL_MUBI, "api/v1/sessions"),
         "films": urljoin(_URL_MUBI, "services/android/films"),
         "film": urljoin(_URL_MUBI, "services/android/films/%s"),
+        "set_watching": urljoin(_URL_MUBI, "api/v1/films/%s/viewing/watching"),
         "set_reel": urljoin(_URL_MUBI, "api/v1/films/%s/viewing/set_reel"),
         "get_url": urljoin(_URL_MUBI, "api/v1/films/%s/reels/%s/secure_url"),
         "startup": urljoin(_URL_MUBI, "services/android/app_startup")
@@ -167,6 +168,17 @@ class Mubi(object):
         films = [self.get_film_metadata(film) for film in json.loads(self.get_now_showing_json())]
         return [f for f in films if f]
 
+    def set_watching(self, film_id):
+        # this call tells the api that the user wants to watch a certain movie and returns the default reel id
+        payload = {'last_time_code': 0}
+        r = requests.put((self._mubi_urls['set_watching'] % str(film_id)), data=payload, headers=self._headers)
+        result = (''.join(r.text)).encode('utf-8')
+        if r.status_code == 200:
+            return json.loads(result)['reel_id']
+        else:
+            xbmc.log("Failed to obtain the reel id with result: %s" % result, 4)
+        return -1
+
     def get_default_reel_id_is_drm(self, film_id):
         reel_id = [(f['reels'][0]['id'], f['reels'][0]['drm'])
                    for f in json.loads(self.get_now_showing_json()) if str(f['id']) == str(film_id)]
@@ -179,14 +191,41 @@ class Mubi(object):
             xbmc.log("Could not find default reel id for film %s" % film_id, 4)
             return None
 
-    def get_play_url(self, film_id):
-        (reel_id, is_drm) = self.get_default_reel_id_is_drm(film_id)
-
-        # set the current reel before playing the movie (reverse-engineered behavior taken from the Android app)
-        payload = {'reel_id': reel_id, 'sidecar_subtitle_language_id': 20}
-        r = requests.put((self._mubi_urls['set_reel'] % str(film_id)), data=payload, headers=self._headers)
+    # function to obtain the film id from the web version of MUBI (not the API)
+    def get_film_id_by_web_url(self, mubi_url):
+        r = requests.get(mubi_url)
         result = (''.join(r.text)).encode('utf-8')
-        xbmc.log("Set reel response: %s" % result, 2)
+        import re
+        m = re.search('"film_id":([0-9]+)', result)
+        film_id = m.group(1)
+        xbmc.log("Got film id: %s" % film_id, 3)
+        return film_id
+
+    def get_play_url(self, film_id):
+        # reels probably refer to different streams of the same movie (usually when the movie is available in two dub versions)
+        # it is necessary to tell the API that one wants to watch a film before requesting the movie URL from the API, otherwise
+        # the URL will not be delivered.
+        # this can be done by either calling
+        #     [1] api/v1/{film_id}/viewing/set_reel, or
+        #     [2] api/v1/{film_id}/viewing/watching
+        # the old behavior of the addon was calling [1], as the reel id could be known from loading the film list.
+        # however, with the new feature of playing a movie by entering the MUBI web url, the reel id is not always known (i.e.
+        # if the film is taken from the library, rather than from the "now showing" section).
+        # by calling [2], the default reel id for a film (which is usually the original dub version of the movie) is returned.
+
+        # <old>
+        # (reel_id, is_drm) = self.get_default_reel_id_is_drm(film_id)
+
+        # set the current reel before playing the movie (if the reel was never set, the movie URL will not be delivered)
+        # payload = {'reel_id': reel_id, 'sidecar_subtitle_language_id': 20}
+        # r = requests.put((self._mubi_urls['set_reel'] % str(film_id)), data=payload, headers=self._headers)
+        # result = (''.join(r.text)).encode('utf-8')
+        # xbmc.log("Set reel response: %s" % result, 2)
+        # </old>
+
+        # new: get the default reel id by calling api/v1/{film_id}/viewing/watching
+        reel_id = self.set_watching(film_id)
+        is_drm = True  # let's just assume, that is_drm is always true
 
         # get the movie URL
         args = "?country=%s&download=false" % (self._country)
