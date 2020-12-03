@@ -38,15 +38,15 @@ mubi = Mubi(plugin.get_setting("username", unicode), plugin.get_setting("passwor
 
 @plugin.route('/')
 def index():
-    films = mubi.now_showing()
-    items = [{
-        'label': film.title,
-        'is_playable': True,
-        'path': plugin.url_for('play_film', identifier=film.mubi_id),
-        'thumbnail': film.artwork,
-        'info': film.metadata._asdict()
-    } for film in films]
-
+    #films = mubi.now_showing()
+    #items = [{
+    #    'label': film.title,
+    #    'is_playable': True,
+    #    'path': plugin.url_for('play_film', identifier=film.mubi_id),
+    #    'thumbnail': film.artwork,
+    #    'info': film.metadata._asdict()
+    #} for film in films]
+    items = []
     items.insert(0, {
         'label': "Play by URL...",
         'is_playable': True,
@@ -79,8 +79,11 @@ def play_film(identifier):
 @plugin.route('/enter_url/')
 def enter_url():
     mubi_url = xbmcgui.Dialog().input("Enter URL")
-    film_id = mubi.get_film_id_by_web_url(mubi_url)
-    return play_film(film_id)
+    film = mubi.get_film_id_by_web_url(mubi_url)
+    reel_id = -1
+    if "reels" in film and len(film["reels"]) > 0:
+        reel_id = reels[xbmcgui.Dialog().select("Select Audio Language", [r['audio_language']['name'] for r in film.reels])]['id']
+    return play_film(film["film_id"]) #, reel_id)
 
 if __name__ == '__main__':
     plugin.run()
