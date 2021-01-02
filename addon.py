@@ -78,7 +78,7 @@ def play_film(identifier):
 
 @plugin.route('/enter_url/')
 def enter_url():
-    mubi_url = xbmcgui.Dialog().input("Enter URL")
+    mubi_url = xbmcgui.Dialog().input("Enter URL", "https://mubi.com/films/")
     film = mubi.get_film_id_by_web_url(mubi_url)
     reel_id = -1
     if "reels" in film and len(film["reels"]) > 0:
