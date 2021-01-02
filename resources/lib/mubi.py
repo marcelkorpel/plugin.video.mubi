@@ -207,7 +207,7 @@ class Mubi(object):
 
     # function to obtain the film id from the web version of MUBI (not the API)
     def get_film_id_by_web_url(self, mubi_url):
-        import re, html
+        import re
         r = self._session.get(
             mubi_url,
             headers = {
